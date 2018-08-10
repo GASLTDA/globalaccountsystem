@@ -1,0 +1,40 @@
+<data>
+    <record id="view_partner_form" model="ir.ui.view">
+        <field name="name">res.partner.avd.inherit</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='city']" position="after">
+                <field name="province_id" placeholder="Province" />
+                <field name="canton_id" placeholder="Canton" />
+                <field name="district_id" placeholder="District" />
+                <field name="locality_id" placeholder="Locality" />
+            </xpath>
+
+            <xpath expr="//field[@name='country_id']" position="attributes">
+                <attribute name="required">1</attribute>
+            </xpath>
+
+            <xpath expr="//field[@name='vat']" position="attributes">
+                <attribute name="required">1</attribute>
+            </xpath>
+
+            <xpath expr="//field[@name='city']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+
+            <xpath expr="//field[@name='state_id']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+
+
+            <xpath expr="//field[@name='email']" position="attributes">
+                <attribute name="required">1</attribute>
+            </xpath>
+
+            <xpath expr="//field[@name='vat']" position="after">
+                <field name="fax_no"  widget="phone"/>
+            </xpath>
+        </field>
+    </record>
+</data>
