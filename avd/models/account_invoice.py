@@ -1158,15 +1158,16 @@ class AccountInvoice(models.Model):
         return '1'
 
 
+
     def _doc_type(self, id):
         if id.type == 'out_invoice':
             return '01'
-        elif id.type == 'out_refund':
-            return '02'
         elif id.type == 'in_refund':
-            return '03'
-
-
+            return '02' # Debit note (Vendor)
+        elif id.type == 'out_refund':
+            return '03' # Credit note (Customer)
+        
+        
     def _get_doc_type(self, id, opp=False):
         # if id.type == 'out_invoice' or id.type == 'out_refund':
         if opp:
