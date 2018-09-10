@@ -74,18 +74,48 @@ class AccountInvoice(models.Model):
     status_tries = fields.Integer(default=0)
     electronic_invoice = fields.Boolean(related='company_id.electronic_invoice')
     folio = fields.Char(_('Folio'), copy=False)
+    pdf_sync = fields.Boolean(default=False, copy=False)
 
     @api.multi
     def action_invoice_open(self):
         res = super(AccountInvoice, self).action_invoice_open()
         if self.company_id.electronic_invoice:
             if self.type in ('out_refund','out_invoice'):
-                self.generate_xml_file()
+                return self.generate_xml_file()
         return res
 
     @api.multi
+    def _auto_pdf_submit(self):
+        ids = self.env['account.invoice'].search([('haicenda_status','=','aceptado'),('pdf_sync','=', False)])
+        for id in ids:
+            self._cr.execute("SELECT id FROM ir_attachment WHERE res_id=%s AND res_model='account.invoice' AND mimetype='application/pdf'",[id.id])
+            pdf = self._cr.fetchone()
+            if pdf:
+                pdf_file = self.env['ir.attachment'].sudo().browse(pdf[0])
+                if pdf_file:
+                    try:
+                        res = requests.post(id.company_id.url + '/api/pdf', {
+                            'data': pdf_file.datas,
+                            'key': id.company_id.access_token,
+                            'clave': id.clave_numerica,
+                            'vat': id.company_id.company_registry,
+                            'date': str(id.date_invoice),
+                        })
+                        try:
+                            res = json.loads(res.content.decode())
+                            if 'status' in res:
+                                if res['status'] == 'Success':
+                                    id.pdf_sync = True
+                        except:
+                            pass
+                    except:
+                        pass
+
+        return True
+
+    @api.multi
     def _auto_resubmit(self):
-        ids = self.env('account.invoice').search([('haicenda_status','in',('rechazado','aceptación parcial')),('state','not in',('draft','cancel')),('submit_tries','<=','10')])
+        ids = self.env['account.invoice'].search([('haicenda_status','in',('rechazado','aceptación parcial')),('state','not in',('draft','cancel')),('submit_tries','<=','10')])
 
         for id in ids:
             if id.company_id.electronic_invoice:
@@ -97,7 +127,7 @@ class AccountInvoice(models.Model):
 
     @api.multi
     def _auto_status_check(self):
-        ids = self.env('account.invoice').search([('haicenda_status','=','procesando'),('state','not in',('draft','cancel')),('status_tries','<=','10')])
+        ids = self.env['account.invoice'].search([('haicenda_status','=','procesando'),('state','not in',('draft','cancel')),('status_tries','<=','10')])
 
         for id in ids:
             if id.company_id.electronic_invoice:
@@ -117,6 +147,7 @@ class AccountInvoice(models.Model):
             res = requests.post(id.company_id.url + '/api/hacienda/status', {
                 'key': id.company_id.access_token,
                 'clave': id.clave_numerica,
+
             })
             try:
                 res = json.loads(res.content.decode())
@@ -136,6 +167,7 @@ class AccountInvoice(models.Model):
                         'key': id.company_id.access_token,
                         'clave': id.clave_numerica,
                         'vat': id.company_id.company_registry,
+                        'date': str(id.date_invoice),
                     })
 
                     file = json.loads(file.content.decode())
@@ -177,6 +209,7 @@ class AccountInvoice(models.Model):
                         'key': id.company_id.access_token,
                         'clave': id.clave_numerica,
                         'vat': id.company_id.company_registry,
+                        'date': str(id.date_invoice),
                     })
 
                     id.xml_file = res.content
@@ -431,6 +464,7 @@ class AccountInvoice(models.Model):
                     'data': base64.b64encode(invoice_dict.encode()),
                     'key': id.company_id.access_token,
                     'clave': Clave,
+                    'date': str(id.date_invoice),
                     'fecha': FechaEmision,
                     'type': type,
                     'vat': id.company_id.company_registry,
@@ -452,9 +486,14 @@ class AccountInvoice(models.Model):
                         id.haicenda_status = message['ind-estado']
                     if 'respuesta-xml' in message:
                         id.response_xml = base64.b64decode(message['respuesta-xml'])
+                    try:
+                        return id.invoice_print()
+                    except:
+                        pass
 
                 except:
                     id.response = res
+
 
             except requests.exceptions.RequestException:
                 if not cron:
@@ -556,6 +595,7 @@ class AccountInvoice(models.Model):
                     'clave': root.findall('Clave')[0].text,
                     'fecha': root.findall('FechaEmision')[0].text,
                     'type': type,
+                    'date': str(id.date_invoice),
                     'vat': id.company_id.company_registry,
                     'emisor': json.dumps({
                         'tipoIdentificacion': root.findall('Emisor')[0].findall('Identificacion')[0].findall('Numero')[0].text ,
